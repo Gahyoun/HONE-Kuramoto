@@ -1,6 +1,6 @@
 # 📌 Harmonic Oscillator Network Dynamics with Kuramoto model
 
-This project implements **coupled harmonic oscillators with Kuramoto-type phase dynamics** embedded in a **weighted complex network**. The model incorporates **position-dependent forces (HONE)** and **phase synchronization effects (Kuramoto model with damping)**.
+This project implements **coupled harmonic oscillators with Kuramoto-type phase dynamics** embedded in a **weighted complex network**. The model incorporates **position-dependent forces (HOND)** and **phase synchronization effects (Kuramoto model with damping)**.
 
 - **Supports multi-threaded CPU execution** 🚀  
 - **Optimized for GPU acceleration with CuPy** ⚡  
