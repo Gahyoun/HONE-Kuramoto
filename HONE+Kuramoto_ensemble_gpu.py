@@ -256,47 +256,56 @@ def compute_community_laplacian_variability(G, ensemble_positions, ensemble_phas
     """
     Compute Laplacian-based synchronization variability at the community level.
 
-    This function calculates the variance of Laplacian eigenvalues and eigenvectors 
-    within each Louvain-detected community and takes the mean variance across all communities.
+    This function evaluates synchronization stability by analyzing the variance of the 
+    second smallest Laplacian eigenvalue (algebraic connectivity, λ₂) and its associated 
+    eigenvector (Fiedler vector, v₂) within each community detected by the Louvain method.
+
+    Unlike a global analysis, this function ensures that each community is treated 
+    as an independent subgraph, allowing us to measure intra-community synchronization.
 
     Parameters:
-        G (networkx.Graph): Input graph representing the network structure.
-        ensemble_positions (list of lists): List of node position histories for each ensemble realization.
-        ensemble_phases (list of lists): List of node phase histories for each ensemble realization.
+        G (networkx.Graph): The input graph representing the network structure.
+        ensemble_positions (list of lists): 
+            - List of node position histories for each ensemble realization.
+        ensemble_phases (list of lists): 
+            - List of node phase histories for each ensemble realization.
 
     Returns:
         dict: A dictionary containing:
             - "community_lambda_2_variance": Variance of the second smallest Laplacian eigenvalue within each community.
             - "community_v2_variance": Variance of the second eigenvector components within each community.
     """
-    # Detect Louvain communities (with fixed seed for reproducibility)
+
+    # 1. Detect Louvain communities (using fixed seed for reproducibility)
     communities = sorted(list(louvain_partitions(G, seed=42))[-1], key=lambda x: min(x))
+    
+    # 2. Initialize dictionaries to store community-based variances
     community_lambda_2_variance = {}
     community_v2_variance = {}
 
-    # Compute Laplacian matrices for each realization
-    laplacian_matrices = np.array([nx.laplacian_matrix(G).toarray() for _ in ensemble_positions])
-    
-    # Store eigenvalues and eigenvectors across the ensemble
-    eigenvalues_list = []
-    eigenvectors_list = []
-
-    for L in laplacian_matrices:
-        eigvals, eigvecs = eigh(L)
-        eigenvalues_list.append(eigvals[1])  # Extract only λ₂ (Algebraic connectivity)
-        eigenvectors_list.append(eigvecs[:, 1])  # Extract only v₂ (Fiedler vector)
-
-    eigenvalues_list = np.array(eigenvalues_list)  # Shape: (ensemble_size,)
-    eigenvectors_list = np.array(eigenvectors_list)  # Shape: (ensemble_size, num_nodes)
-
-    # Compute variance per community
+    # 3. Iterate over each detected community
     for i, community in enumerate(communities):
-        indices = [list(G.nodes).index(node) for node in community]
+        subgraph = G.subgraph(community)  # Extract subgraph for the community
+        L_sub = nx.laplacian_matrix(subgraph).toarray()  # Compute Laplacian matrix of the community
         
-        # Compute variance **within the community** across all ensemble realizations
-        lambda_2_variance_per_community = np.var(eigenvalues_list)
-        v2_variance_per_community = np.var(eigenvectors_list[:, indices])  # Now indexing correctly!
+        eigenvalues_sub_list = []
+        eigenvectors_sub_list = []
 
+        # 4. Compute Laplacian eigenvalues and eigenvectors for each ensemble realization
+        for _ in ensemble_positions:
+            eigvals, eigvecs = eigh(L_sub)  # Eigen decomposition
+            eigenvalues_sub_list.append(eigvals[1])  # Extract only λ₂ (Algebraic connectivity)
+            eigenvectors_sub_list.append(eigvecs[:, 1])  # Extract only v₂ (Fiedler vector)
+
+        # Convert lists to NumPy arrays for variance computation
+        eigenvalues_sub_list = np.array(eigenvalues_sub_list)  # Shape: (ensemble_size,)
+        eigenvectors_sub_list = np.array(eigenvectors_sub_list)  # Shape: (ensemble_size, num_nodes_in_community)
+
+        # 5. Compute variance **within the community** across all ensemble realizations
+        lambda_2_variance_per_community = np.var(eigenvalues_sub_list)
+        v2_variance_per_community = np.var(eigenvectors_sub_list)
+
+        # Store the computed variances
         community_lambda_2_variance[f"Community {i}"] = float(lambda_2_variance_per_community)
         community_v2_variance[f"Community {i}"] = float(v2_variance_per_community)
 
@@ -304,4 +313,3 @@ def compute_community_laplacian_variability(G, ensemble_positions, ensemble_phas
         "community_lambda_2_variance": community_lambda_2_variance,
         "community_v2_variance": community_v2_variance
     }
-    
