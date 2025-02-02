@@ -208,3 +208,125 @@ def HONE_worker_with_damped_kuramoto(adj_matrix, dim, iterations, tol, seed, dt,
         phase_history.append(phases.copy())
 
     return positions_history, phase_history, potential_energy_history, kinetic_energy_history, total_energy_history
+
+
+def compute_community_velocity_variability(G, ensemble_positions):
+    """
+    Compute velocity-based synchronization variability at the community level.
+
+    This function calculates the variance of velocity magnitudes within each Louvain-detected 
+    community and takes the mean variance across all communities.
+
+    Parameters:
+        G (networkx.Graph): Input graph representing the network structure.
+        ensemble_positions (list of lists): List of node position histories for each ensemble realization.
+
+    Returns:
+        dict: A dictionary containing:
+            - "community_velocity_variance": Variance of velocity magnitudes within each community.
+    """
+    # Detect Louvain communities (with fixed seed for reproducibility)
+    communities = sorted(list(louvain_partitions(G, seed=42))[-1], key=lambda x: min(x))
+    community_velocity_variance = {}
+
+    def compute_velocity(positions):
+        return np.linalg.norm(positions[-1] - positions[-2], axis=1)
+
+    # Compute velocities for all ensemble realizations using multi-threading
+    with ThreadPoolExecutor() as executor:
+        velocities = list(executor.map(compute_velocity, ensemble_positions))
+
+    velocities = np.array(velocities)  # Shape: (ensemble_size, num_nodes)
+
+    # Compute variance per community
+    for i, community in enumerate(communities):
+        indices = [list(G.nodes).index(node) for node in community]
+        velocity_variance_per_community = np.var(velocities[:, indices])
+        community_velocity_variance[f"Community {i}"] = float(velocity_variance_per_community)
+
+    return community_velocity_variance
+
+
+def compute_community_phase_variability(G, ensemble_phases):
+    """
+    Compute phase-based synchronization variability at the community level.
+
+    This function calculates the variance of phase values within each Louvain-detected 
+    community and takes the mean variance across all communities.
+
+    Parameters:
+        G (networkx.Graph): Input graph representing the network structure.
+        ensemble_phases (list of lists): List of node phase histories for each ensemble realization.
+
+    Returns:
+        dict: A dictionary containing:
+            - "community_phase_variance": Variance of phase values within each community.
+    """
+    # Detect Louvain communities (with fixed seed for reproducibility)
+    communities = sorted(list(louvain_partitions(G, seed=42))[-1], key=lambda x: min(x))
+    community_phase_variance = {}
+
+    phases = np.array(ensemble_phases)  # Shape: (ensemble_size, num_nodes)
+
+    # Compute variance per community
+    for i, community in enumerate(communities):
+        indices = [list(G.nodes).index(node) for node in community]
+        phase_variance_per_community = np.var(phases[:, indices])
+        community_phase_variance[f"Community {i}"] = float(phase_variance_per_community)
+
+    return community_phase_variance
+
+
+def compute_community_laplacian_variability(G, ensemble_positions, ensemble_phases):
+    """
+    Compute Laplacian-based synchronization variability at the community level.
+
+    This function calculates the variance of Laplacian eigenvalues and eigenvectors 
+    within each Louvain-detected community and takes the mean variance across all communities.
+
+    Parameters:
+        G (networkx.Graph): Input graph representing the network structure.
+        ensemble_positions (list of lists): List of node position histories for each ensemble realization.
+        ensemble_phases (list of lists): List of node phase histories for each ensemble realization.
+
+    Returns:
+        dict: A dictionary containing:
+            - "community_lambda_2_variance": Variance of the second smallest Laplacian eigenvalue within each community.
+            - "community_v2_variance": Variance of the second eigenvector components within each community.
+    """
+    # Detect Louvain communities (with fixed seed for reproducibility)
+    communities = sorted(list(louvain_partitions(G, seed=42))[-1], key=lambda x: min(x))
+    community_lambda_2_variance = {}
+    community_v2_variance = {}
+
+    # Compute Laplacian matrices for each realization
+    laplacian_matrices = np.array([nx.laplacian_matrix(G).toarray() for _ in ensemble_positions])
+    
+    # Store eigenvalues and eigenvectors across the ensemble
+    eigenvalues_list = []
+    eigenvectors_list = []
+
+    for L in laplacian_matrices:
+        eigvals, eigvecs = eigh(L)
+        eigenvalues_list.append(eigvals[1])  # Extract only λ₂ (Algebraic connectivity)
+        eigenvectors_list.append(eigvecs[:, 1])  # Extract only v₂ (Fiedler vector)
+
+    eigenvalues_list = np.array(eigenvalues_list)  # Shape: (ensemble_size,)
+    eigenvectors_list = np.array(eigenvectors_list)  # Shape: (ensemble_size, num_nodes)
+
+    # Compute variance per community
+    for i, community in enumerate(communities):
+        indices = [list(G.nodes).index(node) for node in community]
+        
+        # Compute variance **within the community** across all ensemble realizations
+        lambda_2_variance_per_community = np.var(eigenvalues_list)
+        v2_variance_per_community = np.var(eigenvectors_list[:, indices])  # Now indexing correctly!
+
+        community_lambda_2_variance[f"Community {i}"] = float(lambda_2_variance_per_community)
+        community_v2_variance[f"Community {i}"] = float(v2_variance_per_community)
+
+    return {
+        "community_lambda_2_variance": community_lambda_2_variance,
+        "community_v2_variance": community_v2_variance
+    }
+        
