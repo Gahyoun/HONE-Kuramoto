@@ -11,9 +11,9 @@ This project implements **coupled harmonic oscillators with Kuramoto-type phase 
 ```
 📂 HONE-Kuramoto
 │── 📜 README.md                   # Project documentation
-│── 📜 HONE + Kuramoto analysis.ipynb  # Analysis of Kuramoto synchronization on networks
-│── 📜 HONE + Kuramoto Ensemble CPU.ipynb  # Multi-threaded CPU implementation
-│── 📜 HONE + Kuramoto Ensemble GPU.ipynb  # GPU-accelerated implementation with CuPy
+│── 📜 HONE + Kuramoto analysis.py  # Analysis of Kuramoto synchronization on networks
+│── 📜 HONE + Kuramoto Ensemble CPU.py  # Multi-threaded CPU implementation
+│── 📜 HONE + Kuramoto Ensemble GPU.py  # GPU-accelerated implementation with CuPy
 ```
 ---
 
