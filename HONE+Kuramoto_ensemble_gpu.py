@@ -1,8 +1,3 @@
-import cupy as cp
-import networkx as nx
-from tqdm import tqdm
-from concurrent.futures import ThreadPoolExecutor
-
 def HONE_worker_with_damped_kuramoto_gpu(adj_matrix, dim, iterations, tol, seed, dt, gamma, gamma_theta, K):
     """
     GPU-accelerated Harmonic Oscillator Network Embedding (HONE) with Damped Kuramoto Model.
