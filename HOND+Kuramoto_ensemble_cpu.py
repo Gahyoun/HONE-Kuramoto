@@ -9,7 +9,7 @@ from concurrent.futures import ThreadPoolExecutor  # Multi-threading for paralle
 
 """
 ------------------------------------------------------------------------------------
-        HONE-Kuramoto Model: Synchronization Variability Analysis Framework
+        HOND-Kuramoto Model: Synchronization Variability Analysis Framework
 ------------------------------------------------------------------------------------
 This repository provides a Python implementation of a **Harmonic Oscillator Network Embedding (HONE)** 
 model coupled with a **damped Kuramoto model**. The framework analyzes synchronization 
