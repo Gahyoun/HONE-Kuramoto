@@ -82,10 +82,10 @@ def compute_laplacian_variability_gpu(G, ensemble_positions, ensemble_phases):
 
 def HONE_worker_with_damped_kuramoto_gpu(adj_matrix, dim, iterations, tol, seed, dt, gamma, gamma_theta, K):
     """
-    GPU-accelerated simulation of a network of harmonic oscillators with damped Kuramoto synchronization.
+    Simulate a network of harmonic oscillators with damped Kuramoto phase synchronization (GPU).
 
     Parameters:
-        adj_matrix (numpy.ndarray): Adjacency matrix of the network.
+        adj_matrix (cp.ndarray): Adjacency matrix of the network on GPU.
         dim (int): Embedding dimension.
         iterations (int): Maximum number of iterations.
         tol (float): Convergence threshold.
@@ -96,14 +96,13 @@ def HONE_worker_with_damped_kuramoto_gpu(adj_matrix, dim, iterations, tol, seed,
         K (float): Coupling strength in the Kuramoto model.
 
     Returns:
-        tuple: 
+        tuple:
             - positions_history, phase_history, potential_energy, kinetic_energy, total_energy
     """
     cp.random.seed(seed)
     num_nodes = adj_matrix.shape[0]
-    adj_matrix = cp.asarray(adj_matrix)  # Convert adjacency matrix to GPU
 
-    # Initialize positions, velocities, phases, and intrinsic frequencies
+    # Initialize positions, velocities, phases, and intrinsic frequencies on GPU
     positions = cp.random.rand(num_nodes, dim)
     velocities = cp.zeros_like(positions)
     phases = cp.random.uniform(0, 2 * cp.pi, num_nodes)
@@ -114,13 +113,13 @@ def HONE_worker_with_damped_kuramoto_gpu(adj_matrix, dim, iterations, tol, seed,
     potential_energy_history, kinetic_energy_history, total_energy_history = [], [], []
 
     def calculate_forces(positions):
-        """ Compute interaction forces using GPU acceleration """
+        """ Compute interaction forces between nodes based on adjacency matrix (GPU) """
         forces = cp.zeros_like(positions)
         for i in range(num_nodes):
             delta = positions - positions[i]
             distances = cp.linalg.norm(delta, axis=1)
             mask = distances > 1e-6
-            distances[~mask] = 1e-6  
+            distances[~mask] = cp.maximum(1e-6, cp.min(distances[mask]))  # Avoid division by zero
             forces[i] = cp.sum(adj_matrix[i, mask][:, None] * (delta[mask] / distances[mask, None]), axis=0)
         return forces
 
@@ -130,14 +129,13 @@ def HONE_worker_with_damped_kuramoto_gpu(adj_matrix, dim, iterations, tol, seed,
         velocities += forces * dt - gamma * velocities
         new_positions = positions + velocities * dt
 
-        # Apply Periodic Boundary Conditions (PBC) to phase updates
+        # Apply Kuramoto phase dynamics
         phase_diffs = cp.array([
             cp.sum(adj_matrix[i] * cp.sin((phases - phases[i] + cp.pi) % (2 * cp.pi) - cp.pi)) 
             for i in range(num_nodes)
         ])
-
         phase_velocities += (intrinsic_frequencies + K * phase_diffs - gamma_theta * phase_velocities) * dt
-        new_phases = cp.mod(phases + phase_velocities * dt, 2*cp.pi)
+        new_phases = cp.mod(phases + phase_velocities * dt, 2 * cp.pi)
 
         # Update positions and phases
         positions, phases = new_positions, new_phases
@@ -146,43 +144,41 @@ def HONE_worker_with_damped_kuramoto_gpu(adj_matrix, dim, iterations, tol, seed,
 
     return positions_history, phase_history, potential_energy_history, kinetic_energy_history, total_energy_history
 
-def HONE_kuramoto_ensemble_gpu(G, dim=2, iterations=100, ensemble_size=10, tol=1e-4, dt=0.01, gamma=1.0, gamma_theta=0.1, K=0.5):
+def HONE_gpu_with_kuramoto(G, dim=2, iterations=100, seed_ensemble=100, tol=1e-4, dt=0.01, gamma=1.0, gamma_theta=0.1, K=1.0):
     """
-    Run an ensemble of GPU-accelerated HONE-Kuramoto simulations.
+    GPU-based Harmonic Oscillator Network Embedding with Damped Kuramoto Synchronization.
 
     Parameters:
-        G (networkx.Graph): Network graph.
-        dim (int): Embedding dimension.
-        iterations (int): Number of simulation steps.
-        ensemble_size (int): Number of ensemble realizations (seeds).
-        tol (float): Convergence threshold.
+        G (networkx.Graph): Input graph.
+        dim (int): Number of embedding dimensions.
+        iterations (int): Maximum number of iterations.
+        seed_ensemble (int): Number of random initializations.
+        tol (float): Convergence tolerance.
         dt (float): Time step.
-        gamma (float): Spatial damping coefficient.
-        gamma_theta (float): Phase synchronization damping coefficient.
-        K (float): Kuramoto coupling strength.
+        gamma (float): Damping coefficient for spatial movement.
+        gamma_theta (float): Damping coefficient for phase synchronization.
+        K (float): Coupling strength in the Kuramoto model.
 
     Returns:
         tuple:
-            - ensemble_positions, ensemble_phases, ensemble_potential_energies, 
-              ensemble_kinetic_energies, ensemble_total_energies
+            - ensemble_positions (list of cp.ndarray): List of node positions for each ensemble.
+            - phase_histories (list of cp.ndarray): List of phase histories for each ensemble.
     """
-    adj_matrix = nx.to_numpy_array(G, weight="weight")
-    results = [None] * ensemble_size
+    # Convert adjacency matrix to CuPy array on GPU
+    if nx.is_weighted(G):
+        adj_matrix = cp.asarray(nx.to_numpy_array(G, weight="weight"))
+    else:
+        adj_matrix = cp.asarray(nx.to_numpy_array(G))
+        adj_matrix[adj_matrix > 0] = 1
 
-    with ThreadPoolExecutor() as executor:
-        futures = [
-            executor.submit(
-                HONE_worker_with_damped_kuramoto_gpu,
-                adj_matrix, dim, iterations, tol, seed, dt, gamma, gamma_theta, K
-            )
-            for seed in range(ensemble_size)
-        ]
-        for i, future in enumerate(futures):
-            results[i] = future.result()
+    # GPU execution
+    results = [HONE_worker_with_damped_kuramoto_gpu(adj_matrix, dim, iterations, tol, seed, dt, float(gamma), float(gamma_theta), float(K))
+               for seed in range(seed_ensemble)]
 
     ensemble_positions = [result[0] for result in results]
-    ensemble_phases = [result[1] for result in results]
-    return ensemble_positions, ensemble_phases
+    phase_histories = [result[1] for result in results]
+
+    return ensemble_positions, phase_histories
 
 
 def compute_community_velocity_variability(G, ensemble_positions):
