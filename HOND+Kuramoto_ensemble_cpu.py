@@ -141,12 +141,9 @@ def compute_laplacian_variability(G, ensemble_positions, ensemble_phases):
 # 2. HONE-KURAMOTO MODEL SIMULATION
 # ===========================
 
-def HONE_worker_with_damped_kuramoto(adj_matrix, dim, iterations, tol, seed, dt, gamma, gamma_theta, K):
+def HONE_worker_with_damped_kuramoto_cpu(adj_matrix, dim, iterations, tol, seed, dt, gamma, gamma_theta, K):
     """
-    Simulate a network of harmonic oscillators with damped Kuramoto phase synchronization.
-
-    This function models the evolution of positions and phases of nodes in a network 
-    according to the damped Kuramoto model and harmonic oscillator interactions.
+    Simulate a network of harmonic oscillators with damped Kuramoto phase synchronization (CPU).
 
     Parameters:
         adj_matrix (numpy.ndarray): Adjacency matrix of the network.
@@ -208,7 +205,6 @@ def HONE_worker_with_damped_kuramoto(adj_matrix, dim, iterations, tol, seed, dt,
         phase_history.append(phases.copy())
 
     return positions_history, phase_history, potential_energy_history, kinetic_energy_history, total_energy_history
-
 
 def compute_community_velocity_variability(G, ensemble_positions):
     """
